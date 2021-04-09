@@ -63,6 +63,29 @@ class MNISTClassifier(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
 
+class MNISTDataset(torch.utils.data.Dataset):
+    def __init__(self, split, transform):
+        self.transform = transform
+        self.xs, self.ys = self.get_dataset(split)
+
+    def get_dataset(self, split):
+        data = np.load('/bigdata/mnist/mnist.npz')
+        np.random.seed(0)
+        train_idxs = np.arange(len(data['y_train']))
+        np.random.shuffle(train_idxs)
+        val_size = len(train_idxs)//10
+        if split == "test":
+            return data['x_test'], data['y_test']
+        elif split == "train":
+            return data['x_train'][train_idxs[val_size:]], data['y_train'][train_idxs[val_size:]]
+        elif split == "val":
+            return data['x_train'][train_idxs[:val_size]], data['y_train'][train_idxs[:val_size]]
+
+    def __len__(self):
+        return len(self.ys)
+
+    def __getitem__(self, idx):
+        return self.transform(self.xs[idx]), self.ys[idx]
 
 class MNISTDataModule(pl.LightningDataModule):
     """
@@ -77,27 +100,14 @@ class MNISTDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-    def prepare_data(self):
-        # download only
-        torchvision.datasets.MNIST(self.data_dir, train=True, download=True)
-        torchvision.datasets.MNIST(self.data_dir, train=False, download=True)
-
     def setup(self, stage):
-        # transform
         transform = torchvision.transforms.Compose([
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Normalize((0.1307,), (0.3081,))
         ])
-        mnist_train = torchvision.datasets.MNIST(self.data_dir, train=True, download=False, transform=transform)
-        mnist_test = torchvision.datasets.MNIST(self.data_dir, train=False, download=False, transform=transform)
-
-        # train/val split
-        mnist_train, mnist_val = torch.utils.data.random_split(mnist_train, [55000, 5000])
-
-        # assign to use in dataloaders
-        self.train_dataset = mnist_train
-        self.val_dataset = mnist_val
-        self.test_dataset = mnist_test
+        self.train_dataset = MNIST("train", transform=transform)
+        self.val_dataset = MNIST("val", transform=transform)
+        self.test_dataset = MNIST("test", transform=transform)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
@@ -162,14 +172,14 @@ def get_hyperparameters_args():
     parser.opt_list(
         '--layer1_size',
         default=128, 
-        type=float, 
+        type=int,
         options=[64, 128, 256], 
         tunable=True
     )
     parser.opt_list(
         '--layer2_size',
         default=256, 
-        type=float, 
+        type=int,
         options=[64, 128, 256, 512], 
         tunable=True
     )
@@ -220,9 +230,7 @@ def main():
     hyperparams = get_hyperparameters_args()
     cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
     cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
-    cluster.add_command('source activate recognition')
-    # cluster.add_slurm_cmd(cmd='cpus-per-task', value='4', comment='CPUS per task.')
-    cluster.add_slurm_cmd(cmd='gres', value='gpu:1', comment='gpus per task')
+    cluster.add_command('conda activate recognition')
     cluster.per_experiment_nb_gpus = 1
     cluster.per_experiment_nb_nodes = 1
     cluster.per_experiment_nb_cpus = 8
