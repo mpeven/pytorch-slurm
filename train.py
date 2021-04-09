@@ -41,23 +41,23 @@ class MNISTClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
-        loss = torch.nn.functional.cross_entropy(y_hat, y)
+        loss = torch.nn.functional.cross_entropy(y_hat, y.long())
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
-        loss = torch.nn.functional.cross_entropy(y_hat, y)
+        loss = torch.nn.functional.cross_entropy(y_hat, y.long())
         self.log('val_loss', loss, prog_bar=True)
-        acc = np.mean(torch.eq(torch.argmax(y_hat, 1), y).numpy())
+        acc = np.mean(torch.eq(torch.argmax(y_hat, 1), y).cpu().numpy())
         self.log('val_acc', acc, prog_bar=True)
 
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self(x)
-        loss = torch.nn.functional.cross_entropy(y_hat, y)
+        loss = torch.nn.functional.cross_entropy(y_hat, y.long())
         self.log('test_loss', loss)
-        acc = np.mean(torch.eq(torch.argmax(y_hat, 1), y).numpy())
+        acc = np.mean(torch.eq(torch.argmax(y_hat, 1), y).cpu().numpy())
         self.log('test_acc', acc)
 
     def configure_optimizers(self):
@@ -105,9 +105,9 @@ class MNISTDataModule(pl.LightningDataModule):
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Normalize((0.1307,), (0.3081,))
         ])
-        self.train_dataset = MNIST("train", transform=transform)
-        self.val_dataset = MNIST("val", transform=transform)
-        self.test_dataset = MNIST("test", transform=transform)
+        self.train_dataset = MNISTDataset("train", transform=transform)
+        self.val_dataset = MNISTDataset("val", transform=transform)
+        self.test_dataset = MNISTDataset("test", transform=transform)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
@@ -161,7 +161,7 @@ def get_hyperparameters_args():
     parser = HyperOptArgumentParser(strategy='grid_search', add_help=False)
     parser.add_argument('--test_tube_exp_name', default='sweep_test')
     parser.add_argument('--log_path', default='/home/map6/pytorch-slurm')
-    parser.add_argument('--gpus', default=1)
+    parser.add_argument('--gpus', default=-1)
     parser.opt_list(
         '--learning_rate', 
         default=0.001,
@@ -198,6 +198,11 @@ def get_hyperparameters_args():
         default=8,
         type=int
     )
+    parser.add_argument(
+        '--max_epochs',
+        default=100,
+        type=int
+    )
 
     # Model args auto add
     # parser = MNISTClassifier.add_model_specific_args(parser)
@@ -214,6 +219,7 @@ def get_hyperparameters_args():
 
 
 def train(args, cluster):
+    print(args)
     trainer = Trainer.from_argparse_args(args)
     model = MNISTClassifier(**vars(args))
     datamodule = MNISTDataModule.from_argparse_args(args)
@@ -223,7 +229,7 @@ def train(args, cluster):
 
 def main_non_slurm():
     hyperparams = get_hyperparameters_args()
-    train(hyperparams)
+    train(hyperparams, None)
 
 
 def main():
@@ -231,6 +237,7 @@ def main():
     cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
     cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
     cluster.add_command('conda activate recognition')
+    cluster.memory_mb_per_node = 10000
     cluster.per_experiment_nb_gpus = 1
     cluster.per_experiment_nb_nodes = 1
     cluster.per_experiment_nb_cpus = 8
