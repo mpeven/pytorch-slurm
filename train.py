@@ -150,7 +150,7 @@ def get_args():
 def get_hyperparameters_args():
     parser = HyperOptArgumentParser(strategy='grid_search', add_help=False)
     parser.add_argument('--test_tube_exp_name', default='sweep_test')
-    parser.add_argument('--log_path', default='/some/path/to/log')
+    parser.add_argument('--log_path', default='/home/map6')
     parser.opt_list(
         '--learning_rate', 
         default=0.001,
@@ -172,16 +172,31 @@ def get_hyperparameters_args():
         options=[64, 128, 256, 512], 
         tunable=True
     )
+    parser.opt_list(
+        '--data_dir',
+        default="./", 
+        type=str
+    )
+    parser.opt_list(
+        '--batch_size',
+        default=64, 
+        type=int
+    )
+    parser.opt_list(
+        '--num_workers',
+        default=8,
+        type=int
+    )
 
     # Model args auto add
     # parser = MNISTClassifier.add_model_specific_args(parser)
 
     # Dataset args auto add
-    parser = MNISTDataModule.add_argparse_args(parser)
+    # parser = MNISTDataModule.add_argparse_args(parser)
 
-    # add all the available trainer options to argparse
-    # ie: now --gpus --num_nodes ... --fast_dev_run all work in the cli
-    parser = Trainer.add_argparse_args(parser)
+    # # add all the available trainer options to argparse
+    # # ie: now --gpus --num_nodes ... --fast_dev_run all work in the cli
+    # parser = Trainer.add_argparse_args(parser)
 
     args = parser.parse_args()
     return args
@@ -202,18 +217,13 @@ def main_non_slurm():
 
 def main():
     hyperparams = get_hyperparameters_args()
-    cluster = SlurmCluster(
-        hyperparam_optimizer=hyperparams,
-        log_path=hyperparams.log_path,
-        python_cmd='python',
-        test_tube_exp_name=hyperparams.test_tube_exp_name
-    )
+    cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
     cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
     cluster.add_command('source activate recognition')
     # cluster.add_slurm_cmd(cmd='cpus-per-task', value='4', comment='CPUS per task.')
     cluster.per_experiment_nb_gpus = 1
     cluster.per_experiment_nb_nodes = 1
-    cluster.per_experiment_nb_cpus = 4
+    cluster.per_experiment_nb_cpus = 8
     cluster.job_time = '1:00:00'
     cluster.optimize_parallel_cluster_gpu(train, nb_trials=3*3*4, job_name='hyperparam_sweep')
 
