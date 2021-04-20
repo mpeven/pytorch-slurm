@@ -159,9 +159,17 @@ def get_args():
 
 def get_hyperparameters_args():
     parser = HyperOptArgumentParser(strategy='grid_search', add_help=False)
+
+    # TestTube args (slurm info)
     parser.add_argument('--test_tube_exp_name', default='sweep_test')
     parser.add_argument('--log_path', default='/home/map6/pytorch-slurm')
-    parser.add_argument('--gpus', default=-1)
+
+    # DataModule args
+    parser.add_argument('--data_dir', default="./", type=str)
+    parser.add_argument('--batch_size', default=64, type=int)
+    parser.add_argument('--num_workers', default=8, type=int)
+
+    # LightningModule args (hyperparameters)
     parser.opt_list(
         '--learning_rate', 
         default=0.001,
@@ -183,26 +191,6 @@ def get_hyperparameters_args():
         options=[64, 128, 256, 512], 
         tunable=True
     )
-    parser.add_argument(
-        '--data_dir',
-        default="./", 
-        type=str
-    )
-    parser.add_argument(
-        '--batch_size',
-        default=64, 
-        type=int
-    )
-    parser.add_argument(
-        '--num_workers',
-        default=8,
-        type=int
-    )
-    parser.add_argument(
-        '--max_epochs',
-        default=100,
-        type=int
-    )
 
     # Model args auto add
     # parser = MNISTClassifier.add_model_specific_args(parser)
@@ -212,7 +200,7 @@ def get_hyperparameters_args():
 
     # # add all the available trainer options to argparse
     # # ie: now --gpus --num_nodes ... --fast_dev_run all work in the cli
-    # parser = Trainer.add_argparse_args(parser)
+    parser = Trainer.add_argparse_args(parser)
 
     args = parser.parse_args()
     return args
