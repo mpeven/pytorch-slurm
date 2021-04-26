@@ -204,7 +204,7 @@ def get_args():
     return args
 
 
-def train(args, cluster):
+def train(args, **kwargs):
     trainer = Trainer.from_argparse_args(args)
     model = MNISTClassifier(**vars(args))
     datamodule = MNISTDataModule.from_argparse_args(args)
@@ -212,20 +212,24 @@ def train(args, cluster):
     trainer.test(model)
 
 
+def run_hyperparameter_sweep(hyperparams):
+    cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
+    cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
+    cluster.add_command('conda activate recognition')
+    cluster.memory_mb_per_node = 10000
+    cluster.per_experiment_nb_gpus = 1
+    cluster.per_experiment_nb_nodes = 1
+    cluster.per_experiment_nb_cpus = 8
+    cluster.job_time = '1:00:00'
+    cluster.optimize_parallel_cluster_gpu(train, nb_trials=3*3*4, job_name='hyperparam_sweep')
+
+
 def main():
     hyperparams = get_args()
     if hyperparams.sweep:
-        cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
-        cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
-        cluster.add_command('conda activate recognition')
-        cluster.memory_mb_per_node = 10000
-        cluster.per_experiment_nb_gpus = 1
-        cluster.per_experiment_nb_nodes = 1
-        cluster.per_experiment_nb_cpus = 8
-        cluster.job_time = '1:00:00'
-        cluster.optimize_parallel_cluster_gpu(train, nb_trials=3*3*4, job_name='hyperparam_sweep')
+        run_hyperparameter_sweep(hyperparams)
     else:
-        train(hyperparams, None)
+        train(hyperparams)
 
 
 if __name__ == "__main__":
