@@ -178,7 +178,7 @@ def get_args():
     # TestTube args - hyperparam parser & slurm info
     parser = HyperOptArgumentParser(strategy='grid_search', add_help=False, parents=[parser])
     parser.add_argument('--test_tube_exp_name', default='sweep_test')
-    parser.add_argument('--log_path', default='~/pytorch-slurm')
+    parser.add_argument('--log_path', default='./pytorch-slurm')
 
     # LightningModule args (hyperparameters)
     parser = MNISTClassifier.add_model_specific_args(parser)
@@ -188,7 +188,8 @@ def get_args():
 
 
 def train(args, **kwargs):
-    trainer = Trainer.from_argparse_args(args)
+    logger = pl.loggers.CSVLogger(args.log_path, name=args.test_tube_exp_name)
+    trainer = Trainer.from_argparse_args(args, logger=logger)
     model = MNISTClassifier(**vars(args))
     datamodule = MNISTDataModule.from_argparse_args(args)
     trainer.fit(model, datamodule)
