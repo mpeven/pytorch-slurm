@@ -153,40 +153,13 @@ class MNISTDataModule(pl.LightningDataModule):
             pin_memory=True
         )
 
-# Version without slurm that works
+
 def get_args():
     parser = argparse.ArgumentParser()
-
-    # PROGRAM level args
-    parser.add_argument('--notification_email', type=str)
-
-    # Model args auto add
-    parser = MNISTClassifier.add_model_specific_args(parser)
-
-    # Dataset args auto add
-    parser = MNISTDataModule.add_argparse_args(parser)
-
-    # add all the available trainer options to argparse
-    # ie: now --gpus --num_nodes ... --fast_dev_run all work in the cli
-    parser = Trainer.add_argparse_args(parser)
-
-    args = parser.parse_args()
-    return args
-
-
-def get_args():
-    parser = HyperOptArgumentParser(strategy='grid_search', add_help=False)
     parser.add_argument(
         '-s', '--sweep', action='store_true',
         help='Run a hyperparameter sweep over all options'
     )
-
-    # TestTube args (slurm info)
-    parser.add_argument('--test_tube_exp_name', default='sweep_test')
-    parser.add_argument('--log_path', default='/home/map6/pytorch-slurm')
-
-    # LightningModule args (hyperparameters)
-    parser = MNISTClassifier.add_model_specific_args(parser)
 
     # DataModule args
     parser = MNISTDataModule.add_argparse_args(parser)
@@ -199,6 +172,14 @@ def get_args():
             x.default = 1
         if x.dest == 'max_epochs':
             x.default = 100
+
+    # TestTube args - hyperparam parser & slurm info
+    parser = HyperOptArgumentParser(strategy='grid_search', add_help=False, parents=[parser])
+    parser.add_argument('--test_tube_exp_name', default='sweep_test')
+    parser.add_argument('--log_path', default='/home/map6/pytorch-slurm')
+
+    # LightningModule args (hyperparameters)
+    parser = MNISTClassifier.add_model_specific_args(parser)
 
     args = parser.parse_args()
     return args
