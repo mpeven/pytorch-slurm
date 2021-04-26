@@ -225,7 +225,7 @@ def main():
         cluster.job_time = '1:00:00'
         cluster.optimize_parallel_cluster_gpu(train, nb_trials=3*3*4, job_name='hyperparam_sweep')
     else:
-        trian(hyperparams, None)
+        train(hyperparams, None)
 
 
 if __name__ == "__main__":
