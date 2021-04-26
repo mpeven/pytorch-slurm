@@ -80,6 +80,7 @@ class MNISTClassifier(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
 
+
 class MNISTDataset(torch.utils.data.Dataset):
     def __init__(self, split, transform):
         self.transform = transform
@@ -103,6 +104,7 @@ class MNISTDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         return self.transform(self.xs[idx]), self.ys[idx]
+
 
 class MNISTDataModule(pl.LightningDataModule):
     """
@@ -176,7 +178,7 @@ def get_args():
     # TestTube args - hyperparam parser & slurm info
     parser = HyperOptArgumentParser(strategy='grid_search', add_help=False, parents=[parser])
     parser.add_argument('--test_tube_exp_name', default='sweep_test')
-    parser.add_argument('--log_path', default='/home/map6/pytorch-slurm')
+    parser.add_argument('--log_path', default='~/pytorch-slurm')
 
     # LightningModule args (hyperparameters)
     parser = MNISTClassifier.add_model_specific_args(parser)
@@ -195,7 +197,6 @@ def train(args, **kwargs):
 
 def run_hyperparameter_sweep(hyperparams):
     cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
-    cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
     cluster.add_command('conda activate recognition')
     cluster.memory_mb_per_node = 10000
     cluster.per_experiment_nb_gpus = 1
