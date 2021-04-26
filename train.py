@@ -19,11 +19,28 @@ class MNISTClassifier(pl.LightningModule):
         self.setup_model()
     
     @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--layer1_size', type=int, default=128)
-        parser.add_argument('--layer2_size', type=int, default=256)
-        parser.add_argument('--learning_rate', type=float, default=0.001)
+    def add_model_specific_args(parser):
+        parser.opt_list(
+            '--learning_rate',
+            default=0.001,
+            type=float,
+            options=[0.001, 0.01, 0.1],
+            tunable=True
+        )
+        parser.opt_list(
+            '--layer1_size',
+            default=128,
+            type=int,
+            options=[64, 128, 256],
+            tunable=True
+        )
+        parser.opt_list(
+            '--layer2_size',
+            default=256,
+            type=int,
+            options=[64, 128, 256, 512],
+            tunable=True
+        )
         return parser
 
     def setup_model(self):
@@ -157,57 +174,37 @@ def get_args():
     return args
 
 
-def get_hyperparameters_args():
+def get_args():
     parser = HyperOptArgumentParser(strategy='grid_search', add_help=False)
+    parser.add_argument(
+        '-s', '--sweep', action='store_true',
+        help='Run a hyperparameter sweep over all options'
+    )
 
     # TestTube args (slurm info)
     parser.add_argument('--test_tube_exp_name', default='sweep_test')
     parser.add_argument('--log_path', default='/home/map6/pytorch-slurm')
 
-    # DataModule args
-    parser.add_argument('--data_dir', default="./", type=str)
-    parser.add_argument('--batch_size', default=64, type=int)
-    parser.add_argument('--num_workers', default=8, type=int)
-
     # LightningModule args (hyperparameters)
-    parser.opt_list(
-        '--learning_rate', 
-        default=0.001,
-        type=float,
-        options=[0.001, 0.01, 0.1],
-        tunable=True
-    )
-    parser.opt_list(
-        '--layer1_size',
-        default=128, 
-        type=int,
-        options=[64, 128, 256], 
-        tunable=True
-    )
-    parser.opt_list(
-        '--layer2_size',
-        default=256, 
-        type=int,
-        options=[64, 128, 256, 512], 
-        tunable=True
-    )
+    parser = MNISTClassifier.add_model_specific_args(parser)
 
-    # Model args auto add
-    # parser = MNISTClassifier.add_model_specific_args(parser)
+    # DataModule args
+    parser = MNISTDataModule.add_argparse_args(parser)
 
-    # Dataset args auto add
-    # parser = MNISTDataModule.add_argparse_args(parser)
-
-    # # add all the available trainer options to argparse
-    # # ie: now --gpus --num_nodes ... --fast_dev_run all work in the cli
+    # Trainer args (https://pytorch-lightning.readthedocs.io/en/latest/common/trainer.html#trainer-flags)
     parser = Trainer.add_argparse_args(parser)
+    # Set some sane defaults
+    for x in parser._actions:
+        if x.dest == 'gpus':
+            x.default = 1
+        if x.dest == 'max_epochs':
+            x.default = 100
 
     args = parser.parse_args()
     return args
 
 
 def train(args, cluster):
-    print(args)
     trainer = Trainer.from_argparse_args(args)
     model = MNISTClassifier(**vars(args))
     datamodule = MNISTDataModule.from_argparse_args(args)
@@ -215,22 +212,20 @@ def train(args, cluster):
     trainer.test(model)
 
 
-def main_non_slurm():
-    hyperparams = get_hyperparameters_args()
-    train(hyperparams, None)
-
-
 def main():
-    hyperparams = get_hyperparameters_args()
-    cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
-    cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
-    cluster.add_command('conda activate recognition')
-    cluster.memory_mb_per_node = 10000
-    cluster.per_experiment_nb_gpus = 1
-    cluster.per_experiment_nb_nodes = 1
-    cluster.per_experiment_nb_cpus = 8
-    cluster.job_time = '1:00:00'
-    cluster.optimize_parallel_cluster_gpu(train, nb_trials=3*3*4, job_name='hyperparam_sweep')
+    hyperparams = get_args()
+    if hyperparams.sweep:
+        cluster = SlurmCluster(hyperparam_optimizer=hyperparams, log_path=hyperparams.log_path)
+        cluster.notify_job_status(email='mpeven@gmail.com', on_done=True, on_fail=True)
+        cluster.add_command('conda activate recognition')
+        cluster.memory_mb_per_node = 10000
+        cluster.per_experiment_nb_gpus = 1
+        cluster.per_experiment_nb_nodes = 1
+        cluster.per_experiment_nb_cpus = 8
+        cluster.job_time = '1:00:00'
+        cluster.optimize_parallel_cluster_gpu(train, nb_trials=3*3*4, job_name='hyperparam_sweep')
+    else:
+        trian(hyperparams, None)
 
 
 if __name__ == "__main__":
